@@ -11,7 +11,7 @@ pub fn manage_sysroot(matches: Matches) -> Result<String, &'static str> {
         return Ok("".to_string());
     }
 
-        let str_path = matches.opt_str("s").unwrap()
+        let str_path = matches.opt_str("s").unwrap();
         let path = Path::new(&str_path);
         if !path.exists() {
             return Err("Path does not exist");
