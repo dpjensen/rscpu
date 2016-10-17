@@ -9,38 +9,71 @@ use printers::*;
 use std::collections::BTreeMap;
 use getopts::Options;
 use std::env;
+
 /*
-    we extrapolate threads per core based on data from
-    /sys/devices/sy6stem/cpu/cpu/cpu0/topology/thread_siblings_list
-    `lscpu` is doing something similar, but with bitmasks in thread_siblings
+    We can use the core_siblings_list attribute
+    to extrapolate sockets, hardware cores, etc.
+    The value in this field should be the logical cores per physical package
 */
-fn get_threads_per_core(info_list:&mut BTreeMap<String, String>){
+fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
 
-    let check_path = "/sys/devices/system/cpu/cpu0/topology/thread_siblings_list";
+    let base_path = "/sys/devices/system/cpu/cpu0/topology/core_siblings_list";
+    let check_path = format!("{}{}",sysroot, base_path);
 
-    if check_file(check_path){
-        let thread_siblings:String = open_file_as_string(check_path).unwrap();
-        info_list.insert("threads_per_core".to_string(), thread_siblings
-                                                            .split(",")
-                                                            .collect::<Vec<&str>>()
-                                                            .len().to_string());
+    if !check_file(&check_path){
+        return Err("No core_siblings list found");
+    }
+
+    let core_siblings:String = open_file_as_string(&check_path).unwrap();
+    println!("{:?}", core_siblings);
+    //two formats I've found for the core_siblings_list file: start-end and a,b,c...
+    //TODO: Error handling
+    if core_siblings.contains("-"){
+        let end_val = core_siblings.split("-").collect::<Vec<&str>>()[1].trim();
+        let val_int = end_val.parse::<i32>().unwrap() + 1;
+        return Ok(val_int);
+    } else if core_siblings.contains(","){
+        let sib_count = core_siblings.split(",").collect::<Vec<&str>>().len();
+        return Ok(sib_count as i32);
     } else {
-        println!("Threads Per Core currently not supported on platforms without {}", check_path);
-        return;
+        //¯\_(ツ)_/¯
+        return Ok(1);
     }
 
 }
 
 
-fn read_basic_info() -> BTreeMap<String, String> {
+/*
+    we extrapolate threads per core based on data from
+    /sys/devices/sy6stem/cpu/cpu/cpu0/topology/thread_siblings_list
+    `lscpu` is doing something similar, but with bitmasks in thread_siblings
+*/
+fn get_threads_per_core(sysroot:&str) -> Result<i32, &'static str>{
+
+    let base_path = "/sys/devices/system/cpu/cpu0/topology/thread_siblings_list";
+    let check_path = format!("{}{}", sysroot, base_path);
+
+    if !check_file(&check_path){
+        return Err("thread_siblings_list not found");
+    }
+
+    let thread_siblings:String = open_file_as_string(&check_path).unwrap();
+    let thread_count:usize = thread_siblings.split(",").collect::<Vec<&str>>().len();
+
+    Ok(thread_count as i32)
+
+}
+
+
+fn read_basic_info(sysroot:String) -> BTreeMap<String, String> {
 
     let mut data:BTreeMap<String, String> = BTreeMap::new();
+    let base_info = "/proc/cpuinfo";
 
-    let info_file = "/proc/cpuinfo";
+    let info_file = format!("{}{}",sysroot, base_info);
 
-    let info_str = open_file_as_string(info_file).unwrap();
+    let info_str = open_file_as_string(&info_file).unwrap();
     let mut processor:String = String::new();
-
 
     for line in info_str.lines(){
         let line_parts:Vec<&str> = line.split(":").collect();
@@ -57,27 +90,36 @@ fn read_basic_info() -> BTreeMap<String, String> {
 
     }
 
+    //we get these as ints, and will use them to extrapolate sockets, hw cores, etc.
+    //If we can't get this data, extrapolated data won't be printed as well.
+    let core_siblings = match get_core_siblings(&sysroot){
+        Ok(c)  => { c }
+        Err(e) => {println!("{}", e); -1 }
+    };
+    let threads_per_core = match get_threads_per_core(&sysroot){
+        Ok(t)  => { t }
+        Err(e) => {println!("{}", e); -1 }
+    };
+
+    if core_siblings > 0 && threads_per_core > 0 && processor != "" {
+        let total_cpus = processor.parse::<i32>().unwrap() + 1;
+        let cores_per_socket = core_siblings / threads_per_core;
+        let hw_sockets = total_cpus / threads_per_core / cores_per_socket;
+
+        data.insert("cores_per_socket".to_string(), cores_per_socket.to_string());
+        data.insert("sockets".to_string(), hw_sockets.to_string());
+        data.insert("threads_per_core".to_string(), threads_per_core.to_string());
+
+    }
+
     //How we get the total logical CPUs
     if processor != ""  {
         data.insert("CPUs".to_string(), ((processor.parse::<i32>().unwrap()) + 1).to_string());
-    }
-    //now the threads per core
-    get_threads_per_core(&mut data);
-    //and now cores per socket
-    if  processor != "" && data.get("threads_per_core").is_some(){
-
-        let result = ((processor.parse::<i32>().unwrap()) + 1) /
-                    (data.get("threads_per_core").unwrap().parse::<i32>().unwrap());
-
-        data.insert("cores_per_socket".to_string(), result.to_string());
     }
 
     data
 
 }
-
-
-
 
 fn main() {
 
@@ -109,6 +151,7 @@ fn main() {
     let known_datapoints = vec![("CPUs:","CPUs"),
                                 ("Threads Per Core:", "threads_per_core"),
                                 ("Core(s) Per Socket:", "cores_per_socket"),
+                                ("Socket(s):", "sockets"),
                                 ("Vendor ID:", "vendor_id"),
                                 ("CPU Family:", "cpu family"),
                                 ("Model:", "model"),
@@ -120,11 +163,11 @@ fn main() {
                                 ];
 
 
-    let mut basic = read_basic_info();
+    let mut basic = read_basic_info(sysroot);
 
 
     normal_print(&basic, known_datapoints);
 
-    //println!("{:?}", basic);
+    //println!("\n{:?}", basic);
 
 }

@@ -5,3 +5,4 @@ authors = ["Derek Jensen <derek@dpjensen.net>"]
 
 [dependencies]
 getopts = "0.2.14"
+libc = "0.2.17"
