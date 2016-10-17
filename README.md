@@ -19,6 +19,7 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 - Add colored terminal output. For fun.
 - Support for machine readable output (`-p`)
 - Clean up functions that get topology data
+- Full command-line compatibility with `lscpu`
 
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
