@@ -11,6 +11,7 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 - ✔️ Preliminary support for `-s`
 - ✔️ Read in Data from /proc/cpuinfo
 - ✔️ Get cache data
+- ✔️ Extract op-mode from CPU flags
 
 #Todo
 - Add `uname` capability so we can get arch
@@ -21,7 +22,7 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 - Full command-line compatibility with `lscpu`
 - Pretty-print CPU flags
 - Complete NUMA support
-- Extracp op-mode from CPU flags
+
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
 - https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-cpu
