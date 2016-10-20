@@ -178,12 +178,17 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
         if line_parts.len() == 1{
             continue;
         }
-        //we're using this to grab total number of logical CPUs
-        //No, we can't just check the map later because of rust's non-lexical borrows
-        //see github issue 6393
+        //lscpu grabs the values from the first processor it finds in cpuinfo
+        //we do the same, but then keep iterating to get total num of CPUs
         if line_parts[0].trim() == "processor"{
             processor = line_parts[1].trim().to_string();
+            data.insert(line_parts[0].trim().to_string(), line_parts[1].trim().to_string());
         }
+        //we've reached the end of a CPU, now we just need CPU count
+        if data.contains_key(&line_parts[0].trim().to_string()){
+            continue;
+        }
+
         data.insert(line_parts[0].trim().to_string(), line_parts[1].trim().to_string());
 
     }
@@ -202,7 +207,9 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
     if core_siblings > 0 && threads_per_core > 0 && processor != "" {
         let total_cpus = processor.parse::<i32>().unwrap() + 1;
         let cores_per_socket = core_siblings / threads_per_core;
-        let hw_sockets = total_cpus / threads_per_core / cores_per_socket;
+        let hw_sockets = (total_cpus / threads_per_core) / cores_per_socket;
+
+        println!("{} {} {} {}", total_cpus, cores_per_socket, threads_per_core, hw_sockets);
 
         data.insert("cores_per_socket".to_string(), cores_per_socket.to_string());
         data.insert("sockets".to_string(), hw_sockets.to_string());
