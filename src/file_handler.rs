@@ -33,8 +33,13 @@ pub fn open_file_as_string(fname:&str) -> Result<String, Error> {
 
     try!(fd.read_to_string(&mut file_string));
 
-    Ok(file_string)
+    Ok(file_string.trim().to_string())
 
+}
+
+pub fn check_path(path: &str) -> bool {
+    let patht =  Path::new(path);
+    patht.exists()
 }
 
 //There's a chance that some of these files won't exist, so...

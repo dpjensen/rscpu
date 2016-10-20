@@ -11,6 +11,50 @@ use getopts::Options;
 use std::env;
 
 /*
+    This will pull our cache info from /sys/
+*/
+fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
+
+    let base_cache = "/sys/devices/system/cpu/cpu0/cache/";
+    let cache_root = format!("{}{}", sysroot, base_cache);
+
+    let mut cache_num = 0;
+    let mut cache_vec:Vec<BTreeMap<String, String>> = Vec::new();
+
+    while true{
+        let cache_state = check_path(&format!("{}index{}/",cache_root, cache_num));
+        //println!("{}",format!("{}index{}",cache_root, cache_num));
+        if cache_state {
+            let mut cache_map = BTreeMap::new();
+            let cache_type = open_file_as_string(&format!("{}index{}/type", &cache_root, cache_num));
+            if cache_type.is_ok(){
+                cache_map.insert("type".to_string(), cache_type.unwrap());
+            }
+            let cache_level = open_file_as_string(&format!("{}index{}/level", &cache_root, cache_num));
+            if cache_level.is_ok(){
+                cache_map.insert("level".to_string(), cache_level.unwrap());
+            }
+            let cache_size = open_file_as_string(&format!("{}index{}/size", &cache_root, cache_num));
+            if cache_size.is_ok(){
+                cache_map.insert("size".to_string(), cache_size.unwrap());
+            }
+
+            cache_vec.push(cache_map);
+            cache_num = cache_num + 1;
+
+        } else {
+            if cache_num == 0{
+                return None;
+            } else {
+                return Some(cache_vec);
+            }
+        }
+    }
+    return Some(cache_vec);
+
+}
+
+/*
     We can use the core_siblings_list attribute
     to extrapolate sockets, hardware cores, etc.
     The value in this field should be the logical cores per physical package
@@ -21,11 +65,11 @@ fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
     let check_path = format!("{}{}",sysroot, base_path);
 
     if !check_file(&check_path){
-        return Err("No core_siblings list found");
+        return Err("❌ No core_siblings list found");
     }
 
     let core_siblings:String = open_file_as_string(&check_path).unwrap();
-    println!("{:?}", core_siblings);
+    //println!("{:?}", core_siblings);
     //two formats I've found for the core_siblings_list file: start-end and a,b,c...
     //TODO: Error handling
     if core_siblings.contains("-"){
@@ -42,7 +86,6 @@ fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
 
 }
 
-
 /*
     we extrapolate threads per core based on data from
     /sys/devices/sy6stem/cpu/cpu/cpu0/topology/thread_siblings_list
@@ -54,7 +97,7 @@ fn get_threads_per_core(sysroot:&str) -> Result<i32, &'static str>{
     let check_path = format!("{}{}", sysroot, base_path);
 
     if !check_file(&check_path){
-        return Err("thread_siblings_list not found");
+        return Err("❌ thread_siblings_list not found");
     }
 
     let thread_siblings:String = open_file_as_string(&check_path).unwrap();
@@ -65,7 +108,7 @@ fn get_threads_per_core(sysroot:&str) -> Result<i32, &'static str>{
 }
 
 
-fn read_basic_info(sysroot:String) -> BTreeMap<String, String> {
+fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
 
     let mut data:BTreeMap<String, String> = BTreeMap::new();
     let base_info = "/proc/cpuinfo";
@@ -158,15 +201,16 @@ fn main() {
                                 ("Model Name:", "model name"),
                                 ("Stepping:", "stepping"),
                                 ("CPU MHz:", "cpu MHz"),
+                                ("CACHEDATA", "null"),
                                 ("BogoMIPS:", "bogomips"),
                                 ("Flags:", "flags")
                                 ];
 
 
-    let mut basic = read_basic_info(sysroot);
+    let basic = read_basic_info(&sysroot);
+    let cache_info = handle_cache(&sysroot);
 
-
-    normal_print(&basic, known_datapoints);
+    normal_print(&basic, cache_info, known_datapoints);
 
     //println!("\n{:?}", basic);
 

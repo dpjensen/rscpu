@@ -8,19 +8,23 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 `cargo {run, build}`
 
 #Done
-✔️ Preliminary support for `-s`
-✔️ Read in Data from /proc/cpuinfo
+- ✔️ Preliminary support for `-s`
+- ✔️ Read in Data from /proc/cpuinfo
+- ✔️ Get cache data
 
 #Todo
-- Start running against the `lscpu` test suite
 - Add `uname` capability so we can get arch
 - Add support for endian-ness
 - Add some of the compatibility features features from `lscpu`
 - Add colored terminal output. For fun.
 - Support for machine readable output (`-p`)
-- Clean up functions that get topology data
+- Clean up functions that get topology data, switch from `Result` to `Option`
 - Full command-line compatibility with `lscpu`
-
+- pretty-print CPU flags
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
 - https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-cpu
+
+#Known compatibility issues:
+- ❌ IBM Power 7
+- ❌ sparc64
