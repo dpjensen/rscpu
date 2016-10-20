@@ -11,6 +11,61 @@ use getopts::Options;
 use std::env;
 
 /*
+Not all CPUs have this, obviously.
+*/
+fn cpu_range(sysroot:&str) -> Option<BTreeMap<String, String>>{
+
+    let mut range_map = BTreeMap::new();
+
+    let base_min = "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq";
+    let min_path = format!("{}{}", sysroot, base_min);
+    let min = open_file_as_string(&min_path);
+
+    let base_max = "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
+    let max_path = format!("{}{}", sysroot, base_max);
+    let max = open_file_as_string(&max_path);
+
+    if min.is_ok(){
+        let min_float = min.unwrap().parse::<f32>();
+        if min_float.is_ok(){
+            let min_final:f32 = min_float.unwrap() / 1000.0;
+            range_map.insert("cpu_min".to_string(), min_final.to_string());
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    }
+
+    if max.is_ok(){
+        let max_float = max.unwrap().parse::<f32>();
+        if max_float.is_ok(){
+            let max_final:f32 = max_float.unwrap() / 1000.0;
+            range_map.insert("cpu_max".to_string(), max_final.to_string());
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    }
+
+    Some(range_map)
+
+}
+
+fn get_online(sysroot:&str) -> Option<String>{
+    let base_online = "/sys/devices/system/cpu/online";
+    let cache_online = format!("{}{}", sysroot, base_online);
+
+    let online = open_file_as_string(&cache_online);
+
+    match online{
+        Ok(o) => Some(o),
+        Err(_) => None
+    }
+}
+
+/*
     This will pull our cache info from /sys/
 */
 fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
@@ -59,13 +114,13 @@ fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
     to extrapolate sockets, hardware cores, etc.
     The value in this field should be the logical cores per physical package
 */
-fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
+fn get_core_siblings(sysroot:&str) -> Option<i32>{
 
     let base_path = "/sys/devices/system/cpu/cpu0/topology/core_siblings_list";
     let check_path = format!("{}{}",sysroot, base_path);
 
     if !check_file(&check_path){
-        return Err("❌ No core_siblings list found");
+        return None;
     }
 
     let core_siblings:String = open_file_as_string(&check_path).unwrap();
@@ -75,13 +130,13 @@ fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
     if core_siblings.contains("-"){
         let end_val = core_siblings.split("-").collect::<Vec<&str>>()[1].trim();
         let val_int = end_val.parse::<i32>().unwrap() + 1;
-        return Ok(val_int);
+        return Some(val_int);
     } else if core_siblings.contains(","){
         let sib_count = core_siblings.split(",").collect::<Vec<&str>>().len();
-        return Ok(sib_count as i32);
+        return Some(sib_count as i32);
     } else {
         //¯\_(ツ)_/¯
-        return Ok(1);
+        return Some(1);
     }
 
 }
@@ -91,19 +146,19 @@ fn get_core_siblings(sysroot:&str) -> Result<i32, &'static str>{
     /sys/devices/sy6stem/cpu/cpu/cpu0/topology/thread_siblings_list
     `lscpu` is doing something similar, but with bitmasks in thread_siblings
 */
-fn get_threads_per_core(sysroot:&str) -> Result<i32, &'static str>{
+fn get_threads_per_core(sysroot:&str) -> Option<i32>{
 
     let base_path = "/sys/devices/system/cpu/cpu0/topology/thread_siblings_list";
     let check_path = format!("{}{}", sysroot, base_path);
 
     if !check_file(&check_path){
-        return Err("❌ thread_siblings_list not found");
+        return None;
     }
 
     let thread_siblings:String = open_file_as_string(&check_path).unwrap();
     let thread_count:usize = thread_siblings.split(",").collect::<Vec<&str>>().len();
 
-    Ok(thread_count as i32)
+    Some(thread_count as i32)
 
 }
 
@@ -136,12 +191,12 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
     //we get these as ints, and will use them to extrapolate sockets, hw cores, etc.
     //If we can't get this data, extrapolated data won't be printed as well.
     let core_siblings = match get_core_siblings(&sysroot){
-        Ok(c)  => { c }
-        Err(e) => {println!("{}", e); -1 }
+        Some(c)  => { c }
+        None => { -1 }
     };
     let threads_per_core = match get_threads_per_core(&sysroot){
-        Ok(t)  => { t }
-        Err(e) => {println!("{}", e); -1 }
+        Some(t)  => { t }
+        None => { -1 }
     };
 
     if core_siblings > 0 && threads_per_core > 0 && processor != "" {
@@ -159,6 +214,16 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
     if processor != ""  {
         data.insert("CPUs".to_string(), ((processor.parse::<i32>().unwrap()) + 1).to_string());
     }
+
+    //virt flag data.
+    if data.contains_key("flags"){
+        if data.get("flags").unwrap().contains("svm"){
+            data.insert("virtualization".to_string(), "AMD-V".to_string());
+        } else if data.get("flags").unwrap().contains("vmx") {
+            data.insert("virtualization".to_string(), "VT-x".to_string());
+        }
+    }
+
 
     data
 
@@ -192,6 +257,7 @@ fn main() {
     // Format: ([Printable Name], [Name in dict])
     //because the formats of /proc/cpuinfo and /sys/ can vary, make no assumptions
     let known_datapoints = vec![("CPUs:","CPUs"),
+                                ("On-line CPU(s):", "online"),
                                 ("Threads Per Core:", "threads_per_core"),
                                 ("Core(s) Per Socket:", "cores_per_socket"),
                                 ("Socket(s):", "sockets"),
@@ -201,14 +267,30 @@ fn main() {
                                 ("Model Name:", "model name"),
                                 ("Stepping:", "stepping"),
                                 ("CPU MHz:", "cpu MHz"),
-                                ("CACHEDATA", "null"),
+                                ("CPU Max MHz", "cpu_max"),
+                                ("CPU Min MHz", "cpu_min"),
                                 ("BogoMIPS:", "bogomips"),
+                                ("Virtualization:", "virtualization"),
+                                ("CACHEDATA", "null"),
                                 ("Flags:", "flags")
                                 ];
 
 
-    let basic = read_basic_info(&sysroot);
+    //the basics
+    let mut basic = read_basic_info(&sysroot);
+    //cache stuff
     let cache_info = handle_cache(&sysroot);
+    //online cpu count
+    let online = get_online(&sysroot);
+    if online.is_some(){
+        basic.insert("online".to_string(), online.unwrap());
+    }
+
+    let mhz_range = cpu_range(&sysroot);
+    if mhz_range.is_some(){
+        //This may look strange, but... We want to operation on a no-assumption basis
+        basic.append(&mut mhz_range.unwrap());
+    }
 
     normal_print(&basic, cache_info, known_datapoints);
 

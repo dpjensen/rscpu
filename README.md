@@ -18,9 +18,10 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 - Add some of the compatibility features features from `lscpu`
 - Add colored terminal output. For fun.
 - Support for machine readable output (`-p`)
-- Clean up functions that get topology data, switch from `Result` to `Option`
 - Full command-line compatibility with `lscpu`
 - pretty-print CPU flags
+- `lscpu` seems to be reading from different parts of `/proc/cpuinfo` then I am. Figure this out.
+- Virt flags support
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
 - https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-devices-system-cpu
