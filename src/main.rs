@@ -209,8 +209,6 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
         let cores_per_socket = core_siblings / threads_per_core;
         let hw_sockets = (total_cpus / threads_per_core) / cores_per_socket;
 
-        println!("{} {} {} {}", total_cpus, cores_per_socket, threads_per_core, hw_sockets);
-
         data.insert("cores_per_socket".to_string(), cores_per_socket.to_string());
         data.insert("sockets".to_string(), hw_sockets.to_string());
         data.insert("threads_per_core".to_string(), threads_per_core.to_string());
@@ -222,13 +220,23 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
         data.insert("CPUs".to_string(), ((processor.parse::<i32>().unwrap()) + 1).to_string());
     }
 
-    //virt flag data.
+    //virt flag data, op-mode data
     if data.contains_key("flags"){
-        if data.get("flags").unwrap().contains("svm"){
+        let flist = data.get("flags").unwrap().clone();
+        if flist.contains("svm"){
             data.insert("virtualization".to_string(), "AMD-V".to_string());
-        } else if data.get("flags").unwrap().contains("vmx") {
+        } else if flist.contains("vmx") {
             data.insert("virtualization".to_string(), "VT-x".to_string());
         }
+
+        if flist.contains("lm") || flist.contains("sun4v") || flist.contains("ppc64"){
+            data.insert("op_mode".to_string(), "32-bit, 64-bit".to_string());
+        }
+
+        if flist.contains("ppc"){
+            data.insert("op_mode".to_string(), "32-bit".to_string());
+        }
+
     }
 
 
@@ -263,7 +271,8 @@ fn main() {
     //This vector is the primary source of truth.
     // Format: ([Printable Name], [Name in dict])
     //because the formats of /proc/cpuinfo and /sys/ can vary, make no assumptions
-    let known_datapoints = vec![("CPUs:","CPUs"),
+    let known_datapoints = vec![("CPU op-mode(s)", "op_mode"),
+                                ("CPUs:","CPUs"),
                                 ("On-line CPU(s):", "online"),
                                 ("Threads Per Core:", "threads_per_core"),
                                 ("Core(s) Per Socket:", "cores_per_socket"),
