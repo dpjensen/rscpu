@@ -6,9 +6,50 @@ use file_handler::*;
 mod printers;
 use printers::*;
 
+use std::fs;
 use std::collections::BTreeMap;
 use getopts::Options;
 use std::env;
+
+fn handle_numa(sysroot:&str) -> Option<BTreeMap<String, String>> {
+
+    //first we get the numa nodes.
+    //This is mostly similar to how lscpu does it
+    let base_path = "/sys/devices/system/node";
+    let node_path =  format!("{}{}", sysroot, base_path);
+    let mut numa_map = BTreeMap::new();
+
+    let node_dir = match fs::read_dir(&node_path){
+        Ok(n) => { n }
+        Err(_) => return None
+
+    };
+
+    let mut node_count:i32 = 0;
+    for dir_item in node_dir{
+        let ending = match dir_item {
+            Ok(e) =>  e.path(),
+            Err(_) =>  continue
+        };
+
+        let end_str = match ending.iter().last(){
+            Some(end) => { end.to_str() }
+            None => { continue }
+        };
+
+        if end_str.unwrap_or("").contains("node"){
+            node_count = node_count + 1;
+        }
+
+    }
+
+    numa_map.insert("numa_nodes".to_string(), node_count.to_string());
+
+    Some(numa_map)
+
+
+}
+
 
 /*
 Not all CPUs have this, obviously.
@@ -239,7 +280,7 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
 
     }
 
-
+    handle_numa(sysroot);
     data
 
 }
@@ -277,6 +318,7 @@ fn main() {
                                 ("Threads Per Core:", "threads_per_core"),
                                 ("Core(s) Per Socket:", "cores_per_socket"),
                                 ("Socket(s):", "sockets"),
+                                ("NUMA Node(s):", "numa_nodes"),
                                 ("Vendor ID:", "vendor_id"),
                                 ("CPU Family:", "cpu family"),
                                 ("Model:", "model"),
@@ -306,6 +348,11 @@ fn main() {
     if mhz_range.is_some(){
         //This may look strange, but... We want to operation on a no-assumption basis
         basic.append(&mut mhz_range.unwrap());
+    }
+
+    let numa_info = handle_numa(&sysroot);
+    if numa_info.is_some(){
+        basic.append(&mut numa_info.unwrap());
     }
 
     normal_print(&basic, cache_info, known_datapoints);
