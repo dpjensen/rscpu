@@ -1,4 +1,5 @@
 extern crate getopts;
+extern crate libc;
 
 mod file_handler;
 use file_handler::*;
@@ -10,6 +11,41 @@ use std::fs;
 use std::collections::BTreeMap;
 use getopts::Options;
 use std::env;
+use libc::{uname, c_int};
+
+
+/*
+    This uses the uname system call to get system info.
+    As of now, don't know a way to do this other than the libc crate
+*/
+fn handle_uname() -> Option<BTreeMap<String, String>> {
+
+    let mut machine_map:BTreeMap<String, String> = BTreeMap::new();
+    unsafe{
+        let mut name_struct:libc::utsname = libc::utsname{
+            sysname:[0i8; 65],
+            nodename:[0i8; 65],
+            release:[0i8; 65],
+            version:[0i8; 65],
+            machine:[0i8; 65],
+            domainname:[0i8; 65]
+        };
+
+        let result:c_int = uname(&mut name_struct);
+
+        if result != 0{
+            return None;
+        }
+
+        let mvec = std::mem::transmute::<[i8; 65], [u8; 65]>(name_struct.machine);
+        let machine =  String::from_utf8(mvec.to_vec()).unwrap();
+        machine_map.insert("arch".to_string(), machine);
+
+
+    }
+    Some(machine_map)
+
+}
 
 fn handle_numa(sysroot:&str) -> Option<BTreeMap<String, String>> {
 
@@ -312,7 +348,8 @@ fn main() {
     //This vector is the primary source of truth.
     // Format: ([Printable Name], [Name in dict])
     //because the formats of /proc/cpuinfo and /sys/ can vary, make no assumptions
-    let known_datapoints = vec![("CPU op-mode(s)", "op_mode"),
+    let known_datapoints = vec![("Architecture", "arch"),
+                                ("CPU op-mode(s)", "op_mode"),
                                 ("CPUs:","CPUs"),
                                 ("On-line CPU(s):", "online"),
                                 ("Threads Per Core:", "threads_per_core"),
@@ -353,6 +390,11 @@ fn main() {
     let numa_info = handle_numa(&sysroot);
     if numa_info.is_some(){
         basic.append(&mut numa_info.unwrap());
+    }
+
+    let arch = handle_uname();
+    if arch.is_some(){
+        basic.append(&mut arch.unwrap());
     }
 
     normal_print(&basic, cache_info, known_datapoints);

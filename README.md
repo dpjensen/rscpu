@@ -8,20 +8,21 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 `cargo {run, build}`
 
 #Done
+- ✔️ Add `uname` capability so we can get arch
 - ✔️ Preliminary support for `-s`
 - ✔️ Read in Data from /proc/cpuinfo
 - ✔️ Get cache data
 - ✔️ Extract op-mode from CPU flags
 
 #Todo
-- Add `uname` capability so we can get arch
+- Start automating tests
 - Add support for endian-ness
 - Add some of the compatibility features features from `lscpu`
 - Add colored terminal output. For fun.
 - Support for machine readable output (`-p`)
 - Full command-line compatibility with `lscpu`
 - Pretty-print CPU flags
-- Complete NUMA support
+- Complete NUMA support (started)
 
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
