@@ -1,3 +1,7 @@
 target
 *.swp
-tests
+tests/ppc64-POWER7
+tests/ppc64-POWER7-64cpu
+tests/ppc-qemu
+tests/sparc64
+tests/vbox-win

@@ -13,6 +13,17 @@ use getopts::Options;
 use std::env;
 use libc::{uname, c_int};
 
+fn handle_byte_order() -> BTreeMap<String, String> {
+
+    let mut end_map:BTreeMap<String, String> = BTreeMap::new();
+    if cfg!(target_endian = "little"){
+        end_map.insert("endian".to_string(), "Little Endian".to_string());
+    } else {
+        end_map.insert("endian".to_string(), "Big Endian".to_string());
+    }
+
+    end_map
+}
 
 /*
     This uses the uname system call to get system info.
@@ -40,7 +51,8 @@ fn handle_uname() -> Option<BTreeMap<String, String>> {
         //I honestly don't know if there's a better way to do this...
         let mvec = std::mem::transmute::<[i8; 65], [u8; 65]>(name_struct.machine);
         let machine =  String::from_utf8(mvec.to_vec()).unwrap();
-        machine_map.insert("arch".to_string(), machine);
+        //strip out null bytes
+        machine_map.insert("arch".to_string(), machine.replace(0x00 as char, ""));
 
 
     }
@@ -202,6 +214,7 @@ fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
         let cache_state = check_path(&format!("{}index{}/",cache_root, cache_num));
         //println!("{}",format!("{}index{}",cache_root, cache_num));
         if cache_state {
+            //get all of our cache stats
             let mut cache_map = BTreeMap::new();
             let cache_type = open_file_as_string(&format!("{}index{}/type", &cache_root, cache_num));
             if cache_type.is_ok(){
@@ -393,6 +406,9 @@ fn generate_info(sysroot:&str) -> Option<BTreeMap<String, String>>{
         basic.append(&mut arch.unwrap());
     }
 
+    let mut end = handle_byte_order();
+    basic.append(&mut end);
+
     if basic.len() != 0{
         return Some(basic);
     }else{
@@ -428,8 +444,9 @@ fn main() {
     //This vector is the primary source of truth.
     // Format: ([Printable Name], [Name in dict])
     //because the formats of /proc/cpuinfo and /sys/ can vary, make no assumptions
-    let known_datapoints = vec![("Architecture", "arch"),
-                                ("CPU op-mode(s)", "op_mode"),
+    let known_datapoints = vec![("Architecture:", "arch"),
+                                ("CPU op-mode(s):", "op_mode"),
+                                ("Byte Order:", "endian"),
                                 ("CPUs:","CPUs"),
                                 ("On-line CPU(s):", "online"),
                                 ("Threads Per Core:", "threads_per_core"),
@@ -442,8 +459,8 @@ fn main() {
                                 ("Model Name:", "model name"),
                                 ("Stepping:", "stepping"),
                                 ("CPU MHz:", "cpu MHz"),
-                                ("CPU Max MHz", "cpu_max"),
-                                ("CPU Min MHz", "cpu_min"),
+                                ("CPU Max MHz:", "cpu_max"),
+                                ("CPU Min MHz:", "cpu_min"),
                                 ("BogoMIPS:", "bogomips"),
                                 ("Virtualization:", "virtualization"),
                                 ("CACHEDATA", "null"),
