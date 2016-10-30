@@ -37,6 +37,7 @@ fn handle_uname() -> Option<BTreeMap<String, String>> {
             return None;
         }
 
+        //I honestly don't know if there's a better way to do this...
         let mvec = std::mem::transmute::<[i8; 65], [u8; 65]>(name_struct.machine);
         let machine =  String::from_utf8(mvec.to_vec()).unwrap();
         machine_map.insert("arch".to_string(), machine);
@@ -80,6 +81,50 @@ fn handle_numa(sysroot:&str) -> Option<BTreeMap<String, String>> {
     }
 
     numa_map.insert("numa_nodes".to_string(), node_count.to_string());
+
+    //now we're gonna try for numa config
+    for numa_node in 0..(node_count + 1) {
+
+        let n_node_path = format!("{}/node{}/cpumap", node_path, numa_node);
+
+        let node_string = match open_file_as_string(&n_node_path){
+            Ok(s) => { s }
+            Err(_) => { continue }
+        };
+        let mut node_map = match u64::from_str_radix(&node_string.replace(",", ""), 16){
+            Ok(nm) => { nm }
+            Err(_) => { continue }
+        };
+        //go through and list marked nodes
+        let mut numa_membership:Vec<i32> = Vec::new();
+        for cpu_mem in 0..2048{
+            if node_map < 1{
+                break;
+            }
+
+            if node_map & 1 == 1 {
+                numa_membership.push(cpu_mem);
+            }
+             node_map = node_map >> 1;
+        }
+
+
+        //if there are no 0s in bitmasks, then we don't need to print entire list
+        if (numa_membership.last().unwrap_or(&0) + 1) == numa_membership.len() as i32 {
+            let list_string = format!("0-{}", numa_membership.last().unwrap_or(&0));
+            numa_map.insert(format!("node{}", numa_node), list_string);
+        } else {
+            //otherwise, make and format a list
+             let list_string = format!("{:?}", numa_membership)
+                            .trim_matches(|c| c == '[' || c == ']')
+                            .replace(" ", "")
+                            .to_string();
+
+            //println!("{}", list_string);
+            numa_map.insert(format!("node{}", numa_node), list_string);
+        }
+    } //end loop over node map
+
 
     Some(numa_map)
 
@@ -239,7 +284,6 @@ fn get_threads_per_core(sysroot:&str) -> Option<i32>{
 
 }
 
-
 fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
 
     let mut data:BTreeMap<String, String> = BTreeMap::new();
@@ -316,8 +360,44 @@ fn read_basic_info(sysroot:&str) -> BTreeMap<String, String> {
 
     }
 
-    handle_numa(sysroot);
     data
+
+}
+
+/*
+This is a wrapper around the entire set of data-gathering operations
+*/
+fn generate_info(sysroot:&str) -> Option<BTreeMap<String, String>>{
+    //the basics
+    let mut basic = read_basic_info(&sysroot);
+
+    //online cpu count
+    let online = get_online(&sysroot);
+    if online.is_some(){
+        basic.insert("online".to_string(), online.unwrap());
+    }
+
+    let mhz_range = cpu_range(&sysroot);
+    if mhz_range.is_some(){
+        //This may look strange, but... We want to operation on a no-assumption basis
+        basic.append(&mut mhz_range.unwrap());
+    }
+
+    let numa_info = handle_numa(&sysroot);
+    if numa_info.is_some(){
+        basic.append(&mut numa_info.unwrap());
+    }
+
+    let arch = handle_uname();
+    if arch.is_some(){
+        basic.append(&mut arch.unwrap());
+    }
+
+    if basic.len() != 0{
+        return Some(basic);
+    }else{
+        return None;
+    }
 
 }
 
@@ -367,38 +447,20 @@ fn main() {
                                 ("BogoMIPS:", "bogomips"),
                                 ("Virtualization:", "virtualization"),
                                 ("CACHEDATA", "null"),
+                                ("NUMADATA", "null"),
                                 ("Flags:", "flags")
                                 ];
 
 
-    //the basics
-    let mut basic = read_basic_info(&sysroot);
-    //cache stuff
+    let basic = generate_info(&sysroot);
+    //cache is handled differently, as number, config is unknown.
     let cache_info = handle_cache(&sysroot);
-    //online cpu count
-    let online = get_online(&sysroot);
-    if online.is_some(){
-        basic.insert("online".to_string(), online.unwrap());
+    if basic.is_some(){
+        normal_print(&basic.unwrap(), cache_info, known_datapoints);
+    } else {
+        //on the off chance that something has gone _really_ wrong
+        println!("No CPU info found");
     }
-
-    let mhz_range = cpu_range(&sysroot);
-    if mhz_range.is_some(){
-        //This may look strange, but... We want to operation on a no-assumption basis
-        basic.append(&mut mhz_range.unwrap());
-    }
-
-    let numa_info = handle_numa(&sysroot);
-    if numa_info.is_some(){
-        basic.append(&mut numa_info.unwrap());
-    }
-
-    let arch = handle_uname();
-    if arch.is_some(){
-        basic.append(&mut arch.unwrap());
-    }
-
-    normal_print(&basic, cache_info, known_datapoints);
-
     //println!("\n{:?}", basic);
 
 }

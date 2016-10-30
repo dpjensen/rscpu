@@ -13,16 +13,18 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 - ✔️ Read in Data from /proc/cpuinfo
 - ✔️ Get cache data
 - ✔️ Extract op-mode from CPU flags
+- ✔️ NUMA info
 
 #Todo
 - Start automating tests
 - Add support for endian-ness
 - Add some of the compatibility features features from `lscpu`
 - Add colored terminal output. For fun.
-- Support for machine readable output (`-p`)
 - Full command-line compatibility with `lscpu`
 - Pretty-print CPU flags
-- Complete NUMA support (started)
+- Integer overflow when logical CPUs > 64.
+- Unwrap()s on NUMA parsing that I should deal with
+- Possibly refactor how we print cache info, get rid of extra args
 
 #Extra Reading
 - https://www.kernel.org/doc/Documentation/cputopology.txt
