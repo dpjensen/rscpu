@@ -12,6 +12,86 @@ use std::collections::BTreeMap;
 use getopts::Options;
 use std::env;
 use libc::{uname, c_int};
+use std::process::exit;
+
+/*
+    This part of the virtualization detection looks for vendor info from
+    /proc/bus/pci/devices
+*/
+fn has_pci_device(vendor:u32, device:u32, sysroot:&str) -> bool {
+
+    let base_path = "/proc/bus/pci/devices";
+    let node_path =  format!("{}{}", sysroot, base_path);
+
+    let dev_str = open_file_as_string(&node_path);
+    if dev_str.is_err(){
+        return false
+    }
+
+    for line in dev_str.unwrap().lines(){
+        let mask2 = 0x0000ffff;
+
+        let ven_dev:Vec<&str> = line.split("\t").collect();
+        let ven_dev_int = u32::from_str_radix(ven_dev[1], 16);
+
+        if ven_dev_int.is_err(){
+            continue;
+        }
+        let to_mask = ven_dev_int.unwrap();
+        let dev = to_mask & mask2;
+        let ven = to_mask >> 0x10;
+
+        if dev == device && ven == vendor{
+            return true;
+        }
+    }
+
+    return false;
+
+
+}
+
+/*
+    Master method for detecting a hypervisor
+*/
+fn handle_hypervisor(sysroot:&str) -> Option<BTreeMap<String, String>> {
+    //Hex vendor IDs
+    let hyper_vbox = 0x80ee;
+    let hyper_xen = 0x5853;
+    //let hyper_kvm = 0x0000;
+    //let hyper_mshv = 0x1414;
+    let hyper_vmware = 0x15ad;
+
+    //hex graphics device IDs
+    let graphics_xen = 0x0001;
+    //let graphics_kvm = 0x0000;
+    //let graphics_mshv = 0x5353;
+    let graphics_vmware = 0x0710;
+    let graphics_vbox = 0xbeef;
+
+    let mut visor_map:BTreeMap<String, String> = BTreeMap::new();
+
+    if has_pci_device(hyper_vbox, graphics_vbox, sysroot){
+        visor_map.insert("hypervisor_vendor".to_string(), "Oracle".to_string());
+        visor_map.insert("hypervisor_type".to_string(), "full".to_string());
+    } else if has_pci_device(hyper_vmware, graphics_vmware, sysroot){
+        visor_map.insert("hypervisor_vendor".to_string(), "VMWare".to_string());
+        visor_map.insert("hypervisor_type".to_string(), "full".to_string());
+
+    } else if has_pci_device(hyper_xen, graphics_xen, sysroot){
+        visor_map.insert("hypervisor_vendor".to_string(), "Xen".to_string());
+        visor_map.insert("hypervisor_type".to_string(), "full".to_string());
+
+    }
+
+    if visor_map.len() != 0{
+        return Some(visor_map);
+    } else {
+        return None;
+    }
+
+
+}
 
 fn handle_byte_order() -> BTreeMap<String, String> {
 
@@ -210,7 +290,7 @@ fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
     let mut cache_num = 0;
     let mut cache_vec:Vec<BTreeMap<String, String>> = Vec::new();
 
-    while true{
+    loop{
         let cache_state = check_path(&format!("{}index{}/",cache_root, cache_num));
         //println!("{}",format!("{}index{}",cache_root, cache_num));
         if cache_state {
@@ -240,7 +320,6 @@ fn handle_cache(sysroot:&str) -> Option<Vec<BTreeMap<String, String>>>{
             }
         }
     }
-    return Some(cache_vec);
 
 }
 
@@ -409,6 +488,11 @@ fn generate_info(sysroot:&str) -> Option<BTreeMap<String, String>>{
     let mut end = handle_byte_order();
     basic.append(&mut end);
 
+    let vendor = handle_hypervisor(sysroot);
+    if vendor.is_some(){
+        basic.append(&mut vendor.unwrap());
+    }
+
     if basic.len() != 0{
         return Some(basic);
     }else{
@@ -438,7 +522,7 @@ fn main() {
     //manage the root sysdir
     let sysroot = match manage_sysroot(matches){
         Ok(m)  => { m }
-        Err(e) => { panic!(e.to_string()) }
+        Err(_) => { println!("Invalid path supplied to -s."); exit(1) }
     };
 
     //This vector is the primary source of truth.
@@ -462,6 +546,8 @@ fn main() {
                                 ("CPU Max MHz:", "cpu_max"),
                                 ("CPU Min MHz:", "cpu_min"),
                                 ("BogoMIPS:", "bogomips"),
+                                ("Hypervisor vendor:", "hypervisor_vendor"),
+                                ("Virtualization type:", "hypervisor_type"),
                                 ("Virtualization:", "virtualization"),
                                 ("CACHEDATA", "null"),
                                 ("NUMADATA", "null"),

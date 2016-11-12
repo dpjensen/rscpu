@@ -36,3 +36,13 @@ fn run_a_test_x86_64_64cpu(){
     arm_test.start_test();
 
 }
+
+#[test]
+fn run_a_test_vbox_win(){
+
+    let path = "vbox-win";
+
+    let arm_test = envTester::new(path);
+    arm_test.start_test();
+
+}
