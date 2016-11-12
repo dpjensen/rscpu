@@ -21,10 +21,10 @@ This is an early alpha, and under development. If your kernel/CPU driverges too 
 
 #Todo
 - Continue expanding support for virtualization vedor/type info from pci devices
--- Implement inline asm for `cpuid`
--- Look into features for dmi info
--- Basically lots of work to do
-- Add some of the compatibility features features from `lscpu`
+ - Implement inline asm for `cpuid`
+ - Look into features for dmi info
+ - Basically lots of work to do
+- Add some of the compatibility features from `lscpu`
 - Add colored terminal output. For fun.
 - Full command-line compatibility with `lscpu`
 - Integer overflow when logical CPUs > 64.
