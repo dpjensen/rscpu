@@ -26,17 +26,22 @@ pub struct envTester{
 
 impl envTester {
 
-    pub fn start_test(&self) {
+    pub fn start_test(&self, ignore:Vec<i32>, check_len:bool) {
         //now we actually compare the two
-        if self.ref_map.len() != self.our_map.len() {
-            println!("{:?}", self.ref_map);
-            println!("{:?}", self.our_map);
-            panic!("Sizes of the two outputs are not equal.")
+        if check_len{
+            if self.ref_map.len() != self.our_map.len() {
+                println!("{:?}", self.ref_map);
+                println!("{:?}", self.our_map);
+                panic!("Sizes of the two outputs are not equal.")
+            }
         }
         //iterate time...
         for datapoint in 0..self.ref_map.len(){
             println!("STARTING TEST");
-            normalize_and_compare(&self.ref_map[datapoint], &self.our_map[datapoint]);
+            let p = datapoint as i32;
+            if !ignore.contains(&p){
+                normalize_and_compare(&self.ref_map[datapoint], &self.our_map[datapoint]);
+            }
         }
     }
 
