@@ -541,6 +541,7 @@ fn main() {
                                 ("CPU Family:", "cpu family"),
                                 ("Model:", "model"),
                                 ("Model Name:", "model name"),
+                                ("Model Name:", "cpu"),
                                 ("Stepping:", "stepping"),
                                 ("CPU MHz:", "cpu MHz"),
                                 ("CPU Max MHz:", "cpu_max"),
